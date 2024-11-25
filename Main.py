@@ -15,11 +15,12 @@ from imblearn.over_sampling import SMOTE
 from gensim.models import Word2Vec
 import torch
 from sklearn.model_selection import train_test_split
-from transformers import BertTokenizer, BertModel, BertForSequenceClassification, AdamW
+from transformers import BertTokenizer, BertModel, BertForSequenceClassification, AdamW, RobertaTokenizer, RobertaForSequenceClassification
 from torch.utils.data import DataLoader, Dataset
 from transformers import get_scheduler
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report,ConfusionMatrixDisplay
+from torch.nn import functional as F
 
 
 
@@ -27,7 +28,7 @@ from sklearn.metrics import classification_report,ConfusionMatrixDisplay
 
 # %% Data Loading
 
-data = pd.read_csv("rawdata.csv")
+data = pd.read_csv("data/raw/rawdata.csv")
 
 if "Unnamed: 0" in data.columns:
     data.drop(columns=["Unnamed: 0"], inplace=True)
@@ -162,77 +163,169 @@ visualize_word_cloud(data["cleaned_statement"])
 display_common_words(data["cleaned_statement"], n=10)
 
 
-# %% Data Splitting
+# %% Fine-Tuning BERT for Multi-Class Text Classification with Focal Loss and Dynamic Learning Rate Scheduling
+
+# # Load the preprocessed data
+# preprocessed_path = "data/processed/preprocessed_data.csv"
+# data = pd.read_csv(preprocessed_path)
+#
+# data = data.dropna(subset=["cleaned_statement"])
+# data["cleaned_statement"] = data["cleaned_statement"].astype(str)
+#
+# X = data["cleaned_statement"]
+# y = data["status"]
+#
+# label_encoder = LabelEncoder()
+# y_encoded = label_encoder.fit_transform(y)
+#
+# X_train, X_temp, y_train, y_temp = train_test_split(
+#     X, y_encoded, test_size=0.3, stratify=y_encoded, random_state=42
+# )
+# X_val, X_test, y_val, y_test = train_test_split(
+#     X_temp, y_temp, test_size=0.5, stratify=y_temp, random_state=42
+# )
+#
+# tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+#
+# class TextDataset(Dataset):
+#     def __init__(self, texts, labels, tokenizer, max_length=128):
+#         self.texts = texts
+#         self.labels = labels
+#         self.tokenizer = tokenizer
+#         self.max_length = max_length
+#
+#     def __len__(self):
+#         return len(self.texts)
+#
+#     def __getitem__(self, idx):
+#         text = self.texts.iloc[idx]
+#         label = self.labels[idx]
+#         encoding = self.tokenizer(
+#             text,
+#             padding="max_length",
+#             truncation=True,
+#             max_length=self.max_length,
+#             return_tensors="pt"
+#         )
+#         return {
+#             "input_ids": encoding["input_ids"].squeeze(0),
+#             "attention_mask": encoding["attention_mask"].squeeze(0),
+#             "label": torch.tensor(label, dtype=torch.long)
+#         }
+#
+# train_dataset = TextDataset(X_train, y_train, tokenizer)
+# val_dataset = TextDataset(X_val, y_val, tokenizer)
+#
+# train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+# val_loader = DataLoader(val_dataset, batch_size=16)
+#
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#
+# model = BertForSequenceClassification.from_pretrained(
+#     "bert-base-uncased",
+#     num_labels=len(label_encoder.classes_)
+# )
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# model.to(device)
+#
+# optimizer = AdamW(model.parameters(), lr=3e-5)  # Reduced learning rate for finer adjustments
+# num_training_steps = len(train_loader) * 7  # Adjusted for 7 epochs
+# lr_scheduler = get_scheduler(
+#     "linear", optimizer=optimizer, num_warmup_steps=int(0.1 * num_training_steps), num_training_steps=num_training_steps
+# )
+#
+# def focal_loss(logits, labels, alpha=1.0, gamma=2.0):
+#     ce_loss = F.cross_entropy(logits, labels, reduction='none')
+#     p_t = torch.exp(-ce_loss)
+#     focal_loss = alpha * (1 - p_t) ** gamma * ce_loss
+#     return focal_loss.mean()
+#
+# epochs = 7
+# patience = 2
+# best_val_loss = float("inf")
+# stop_counter = 0
+#
+# for epoch in range(epochs):
+#     model.train()
+#     total_loss = 0
+#     for batch in train_loader:
+#         batch = {k: v.to(device) for k, v in batch.items()}
+#         outputs = model(
+#             input_ids=batch["input_ids"],
+#             attention_mask=batch["attention_mask"]
+#         )
+#         loss = focal_loss(outputs.logits, batch["label"], alpha=1.0, gamma=2.0)
+#         total_loss += loss.item()
+#         loss.backward()
+#         optimizer.step()
+#         lr_scheduler.step()
+#         optimizer.zero_grad()
+#     avg_train_loss = total_loss / len(train_loader)
+#     print(f"Epoch {epoch + 1}, Training Loss: {avg_train_loss:.4f}")
+#
+#     model.eval()
+#     val_loss = 0
+#     predictions, true_labels = [], []
+#     with torch.no_grad():
+#         for batch in val_loader:
+#             batch = {k: v.to(device) for k, v in batch.items()}
+#             outputs = model(
+#                 input_ids=batch["input_ids"],
+#                 attention_mask=batch["attention_mask"]
+#             )
+#             loss = focal_loss(outputs.logits, batch["label"], alpha=1.0, gamma=2.0)
+#             val_loss += loss.item()
+#             preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
+#             predictions.extend(preds)
+#             true_labels.extend(batch["label"].cpu().numpy())
+#     avg_val_loss = val_loss / len(val_loader)
+#     print(f"Epoch {epoch + 1}, Validation Loss: {avg_val_loss:.4f}")
+#
+#     if avg_val_loss < best_val_loss:
+#         best_val_loss = avg_val_loss
+#         stop_counter = 0
+#         torch.save(model.state_dict(), "best_focal_loss_bert_model.pth")
+#     else:
+#         stop_counter += 1
+#         if stop_counter >= patience:
+#             print("Early stopping triggered.")
+#             break
+#
+# model.load_state_dict(torch.load("best_focal_loss_bert_model.pth"))
+#
+# predictions, true_labels = [], []
+# model.eval()
+# with torch.no_grad():
+#     for batch in val_loader:
+#         batch = {k: v.to(device) for k, v in batch.items()}
+#         outputs = model(
+#             input_ids=batch["input_ids"],
+#             attention_mask=batch["attention_mask"]
+#         )
+#         preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
+#         predictions.extend(preds)
+#         true_labels.extend(batch["label"].cpu().numpy())
+#
+# print("\nValidation Results:")
+# print(classification_report(true_labels, predictions, target_names=label_encoder.classes_))
+#
+# ConfusionMatrixDisplay.from_predictions(true_labels, predictions, display_labels=label_encoder.classes_)
+# plt.show()
+
+# %%
+
 preprocessed_path = "data/processed/preprocessed_data.csv"
 data = pd.read_csv(preprocessed_path)
 
-data = data.dropna(subset=["status"])
-
+data = data.dropna(subset=["cleaned_statement"])
 data["cleaned_statement"] = data["cleaned_statement"].astype(str)
 
 X = data["cleaned_statement"]
 y = data["status"]
 
-X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, stratify=y, random_state=42)
-
-X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, stratify=y_temp, random_state=42)
-
-print("Class Distribution:")
-print("Training Set:\n", y_train.value_counts())
-print("\nValidation Set:\n", y_val.value_counts())
-print("\nTest Set:\n", y_test.value_counts())
-
-w2v_model = Word2Vec(
-    sentences=[text.split() for text in data["cleaned_statement"]],
-    vector_size=100,
-    window=5,
-    min_count=1,
-    workers=4
-)
-
-def compute_doc_vector(text, model):
-
-    words = text.split()
-    word_vectors = [model.wv[word] for word in words if word in model.wv]
-    if word_vectors:
-        return np.mean(word_vectors, axis=0)
-    else:
-        return np.zeros(model.vector_size)
-
-
-X_train_w2v = np.array([compute_doc_vector(text, w2v_model) for text in X_train])
-
-smote = SMOTE(random_state=42)
-X_train_resampled, y_train_resampled = smote.fit_resample(X_train_w2v, y_train)
-
-print("\nClass Distribution After SMOTE (Training Set):")
-print(pd.Series(y_train_resampled).value_counts())
-
-resampled_training_path = "data/processed/resampled_training_data.csv"
-resampled_training_data = pd.DataFrame(X_train_resampled)
-resampled_training_data["status"] = y_train_resampled.values
-resampled_training_data.to_csv(resampled_training_path, index=False)
-
-
-# %% Advanced Text Representations using BERT
-
-# Load the preprocessed data
-preprocessed_path = "data/processed/preprocessed_data.csv"
-data = pd.read_csv(preprocessed_path)
-
-# Ensure no missing values in the cleaned statement column
-data = data.dropna(subset=["cleaned_statement"])
-data["cleaned_statement"] = data["cleaned_statement"].astype(str)
-
-# Define features and target
-X = data["cleaned_statement"]  # Preprocessed text
-y = data["status"]             # Target labels
-
-# Encode labels into numerical format
 label_encoder = LabelEncoder()
 y_encoded = label_encoder.fit_transform(y)
 
-# Train-test split
 X_train, X_temp, y_train, y_temp = train_test_split(
     X, y_encoded, test_size=0.3, stratify=y_encoded, random_state=42
 )
@@ -240,8 +333,7 @@ X_val, X_test, y_val, y_test = train_test_split(
     X_temp, y_temp, test_size=0.5, stratify=y_temp, random_state=42
 )
 
-# Tokenizer and Dataset
-tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 
 class TextDataset(Dataset):
     def __init__(self, texts, labels, tokenizer, max_length=128):
@@ -277,32 +369,29 @@ val_loader = DataLoader(val_dataset, batch_size=16)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Class Weights (Based on Class Distribution)
-class_counts = pd.Series(y_train).value_counts().sort_index()
-total_samples = len(y_train)
-class_weights = total_samples / (len(label_encoder.classes_) * class_counts)
-class_weights = torch.tensor(class_weights.values, dtype=torch.float32).to(device)
-
-# Model: Pretrained BERT for classification
-model = BertForSequenceClassification.from_pretrained(
-    "bert-base-uncased",
+model = RobertaForSequenceClassification.from_pretrained(
+    "roberta-base",
     num_labels=len(label_encoder.classes_)
 )
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
-# Optimizer and Scheduler
-optimizer = AdamW(model.parameters(), lr=5e-5)
-num_training_steps = len(train_loader) * 5  # 5 epochs
+optimizer = AdamW(model.parameters(), lr=2e-5)
+num_training_steps = len(train_loader) * 7
 lr_scheduler = get_scheduler(
     "linear", optimizer=optimizer, num_warmup_steps=int(0.1 * num_training_steps), num_training_steps=num_training_steps
 )
 
-# Loss Function with Class Weights
-loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights)
+def focal_loss(logits, labels, alpha=1.0, gamma=2.0):
+    ce_loss = F.cross_entropy(logits, labels, reduction='none')
+    p_t = torch.exp(-ce_loss)
+    focal_loss = alpha * (1 - p_t) ** gamma * ce_loss
+    return focal_loss.mean()
 
-# Training Loop
-epochs = 5
+epochs = 7
+patience = 2
+best_val_loss = float("inf")
+stop_counter = 0
+
 for epoch in range(epochs):
     model.train()
     total_loss = 0
@@ -312,18 +401,47 @@ for epoch in range(epochs):
             input_ids=batch["input_ids"],
             attention_mask=batch["attention_mask"]
         )
-        loss = loss_fn(outputs.logits, batch["label"])
+        loss = focal_loss(outputs.logits, batch["label"], alpha=1.0, gamma=2.0)
         total_loss += loss.item()
         loss.backward()
         optimizer.step()
         lr_scheduler.step()
         optimizer.zero_grad()
-    avg_loss = total_loss / len(train_loader)
-    print(f"Epoch {epoch + 1}, Loss: {avg_loss:.4f}")
+    avg_train_loss = total_loss / len(train_loader)
+    print(f"Epoch {epoch + 1}, Training Loss: {avg_train_loss:.4f}")
 
-# Validation Loop
-model.eval()
+    model.eval()
+    val_loss = 0
+    predictions, true_labels = [], []
+    with torch.no_grad():
+        for batch in val_loader:
+            batch = {k: v.to(device) for k, v in batch.items()}
+            outputs = model(
+                input_ids=batch["input_ids"],
+                attention_mask=batch["attention_mask"]
+            )
+            loss = focal_loss(outputs.logits, batch["label"], alpha=1.0, gamma=2.0)
+            val_loss += loss.item()
+            preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
+            predictions.extend(preds)
+            true_labels.extend(batch["label"].cpu().numpy())
+    avg_val_loss = val_loss / len(val_loader)
+    print(f"Epoch {epoch + 1}, Validation Loss: {avg_val_loss:.4f}")
+
+    if avg_val_loss < best_val_loss:
+        best_val_loss = avg_val_loss
+        stop_counter = 0
+        torch.save(model.state_dict(), "best_roberta_model.pth")
+    else:
+        stop_counter += 1
+        if stop_counter >= patience:
+            print("Early stopping triggered.")
+            break
+
+model.load_state_dict(torch.load("best_roberta_model.pth"))
+
 predictions, true_labels = [], []
+model.eval()
 with torch.no_grad():
     for batch in val_loader:
         batch = {k: v.to(device) for k, v in batch.items()}
@@ -335,11 +453,8 @@ with torch.no_grad():
         predictions.extend(preds)
         true_labels.extend(batch["label"].cpu().numpy())
 
-# Evaluation
 print("\nValidation Results:")
 print(classification_report(true_labels, predictions, target_names=label_encoder.classes_))
 
-# Confusion Matrix
 ConfusionMatrixDisplay.from_predictions(true_labels, predictions, display_labels=label_encoder.classes_)
 plt.show()
-

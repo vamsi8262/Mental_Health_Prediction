@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="ubuntu@18.206.152.64:22 key" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" autoUpload="Always" serverName="ubuntu@44.200.217.61:22 key" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
       <paths name="NLP_Project">
         <serverdata>
@@ -9,14 +9,28 @@
           </mappings>
         </serverdata>
       </paths>
-      <paths name="ubuntu@18.206.152.64:22 key">
+      <paths name="ubuntu@3.223.136.96:22 key (2)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="ubuntu@3.236.194.238:22 key">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="ubuntu@44.200.217.61:22 key">
         <serverdata>
           <mappings>
             <mapping deploy="/home/ubuntu/nlp_project" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
-      <paths name="ubuntu@3.223.136.96:22 key (2)">
+      <paths name="ubuntu@44.220.87.54:22 key">
         <serverdata>
           <mappings>
             <mapping local="$PROJECT_DIR$" web="/" />

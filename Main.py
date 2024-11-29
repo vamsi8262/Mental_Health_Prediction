@@ -183,7 +183,7 @@ label_encoder = LabelEncoder()
 y_encoded = label_encoder.fit_transform(y)
 
 # Save Label Encoder for Later Use
-joblib.dump(label_encoder.classes_, "label_encoder.pkl")
+joblib.dump(label_encoder, "label_encoder.pkl")
 
 
 # Train-Test Split
@@ -332,4 +332,3 @@ plt.show()
 
 
 # %%
-

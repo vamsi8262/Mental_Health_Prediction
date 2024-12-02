@@ -29,37 +29,61 @@ import random
 
 # %% Data Loading
 
+# Load dataset
 data = pd.read_csv("data/raw/rawdata.csv")
 
 if "Unnamed: 0" in data.columns:
     data.drop(columns=["Unnamed: 0"], inplace=True)
     print("Dropped 'Unnamed: 0' column.")
 
-print(f"Missing values before handling: {data.isna().sum().sum()}")
+# Check rows before cleaning
+initial_row_count = data.shape[0]
+print(f"Initial number of rows: {initial_row_count}")
 
-data.dropna(inplace=True)
+# Strip whitespace and replace empty strings with NaN
+data["statement"] = data["statement"].str.strip()
+data["status"] = data["status"].str.strip()
+data.replace("", pd.NA, inplace=True)
 
-print(f"Missing values after handling: {data.isna().sum().sum()}")
+# Drop rows where 'statement' or 'status' is NaN
+data.dropna(subset=["statement", "status"], inplace=True)
 
+# Drop duplicate rows
 duplicate_count = data.duplicated().sum()
-
 if duplicate_count > 0:
     print(f"Found {duplicate_count} duplicate rows. Removing them...")
     data.drop_duplicates(inplace=True)
 
+# Check rows after cleaning
+final_row_count = data.shape[0]
+print(f"Final number of rows: {final_row_count}")
+print(f"Number of rows removed: {initial_row_count - final_row_count}")
+
+# Display missing values
+print(f"Missing values after handling: {data.isna().sum().sum()}")
+
+# Plot class distribution
 print("\nClass Distribution:")
 print(data["status"].value_counts())
-
 data["status"].value_counts().plot(kind="bar")
 plt.title("Class Distribution")
 plt.xlabel("Status")
 plt.ylabel("Count")
 plt.show()
 
+# Display first 5 rows
 print("\nFirst 5 rows of the dataset:")
 print(data.head())
 
+
+
+
+
+
 # %% Data Preprocessing
+
+data_path = "data/processed/cleaned_data.csv"
+data = pd.read_csv(data_path)
 
 def clean_text(text):
     """

@@ -1,181 +1,50 @@
-# import streamlit as st
-# import pandas as pd
-# import torch
-# from transformers import RobertaTokenizer, RobertaForSequenceClassification
-# import json
-# import random
-# import pickle
-# import joblib
-#
-# # Paths
-# MODEL_PATH = "best_roberta_large_model.pth"
-# LABEL_ENCODER_PATH = "label_encoder.pkl"
-# QUESTION_POOL_PATH = "question_pool.json"
-#
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#
-# # Load model
-# model = RobertaForSequenceClassification.from_pretrained("roberta-large", num_labels=7)
-# try:
-#     model.load_state_dict(torch.load(MODEL_PATH, map_location=device), strict=False)
-#     model.to(device)
-#     model.eval()
-# except FileNotFoundError:
-#     st.error(f"Model file not found at {MODEL_PATH}. Ensure the model file is available.")
-#
-# # Load tokenizer
-# tokenizer = RobertaTokenizer.from_pretrained("roberta-large")
-#
-# # Load label encoder
-# try:
-#     with open(LABEL_ENCODER_PATH, "rb") as file:
-#         label_encoder = joblib.load("label_encoder.pkl")
-# except FileNotFoundError:
-#     st.error(f"Label encoder file not found at {LABEL_ENCODER_PATH}. Ensure the file is available.")
-#
-# # Load question pool
-# try:
-#     with open(QUESTION_POOL_PATH, "r") as file:
-#         question_pool = json.load(file)["questions"]
-# except FileNotFoundError:
-#     st.error(f"Question pool file not found at {QUESTION_POOL_PATH}. Ensure the file is available.")
-# except KeyError:
-#     st.error("Invalid question pool format. Ensure the JSON file contains a 'questions' key.")
-#
-# # Function to predict a single input
-# def predict_statement(statement):
-#     inputs = tokenizer(
-#         statement,
-#         return_tensors="pt",
-#         padding="max_length",
-#         truncation=True,
-#         max_length=128
-#     )
-#     inputs = {key: value.to(device) for key, value in inputs.items()}
-#     model.eval()
-#     with torch.no_grad():
-#         outputs = model(**inputs)
-#     prediction = torch.argmax(outputs.logits, dim=1).item()
-#     return label_encoder.inverse_transform([prediction])[0]
-#
-# # Function to handle multiple predictions from a DataFrame
-# def predict_file(file):
-#     try:
-#         df = pd.read_csv(file)
-#         if "statement" not in df.columns:
-#             return "Invalid file format. Ensure the file has a 'statement' column."
-#         df["predicted_status"] = df["statement"].apply(predict_statement)
-#         return df
-#     except Exception as e:
-#         return f"Error processing file: {e}"
-#
-# # Streamlit UI
-# st.title("Mental Health Diagnostic App")
-#
-# # Tabs for navigation
-# tab1, tab2, tab3 = st.tabs(["Type Input", "Upload File", "Answer Questions"])
-#
-# # Tab 1: Type Input
-# with tab1:
-#     st.header("Type Your Statement")
-#     user_input = st.text_area("Enter your statement below:")
-#     if st.button("Submit", key="submit_text"):
-#         if user_input.strip():
-#             try:
-#                 result = predict_statement(user_input)
-#                 st.success(f"The predicted mental health status is: **{result}**")
-#             except Exception as e:
-#                 st.error(f"Error in prediction: {e}")
-#         else:
-#             st.warning("Please enter a valid statement.")
-#
-# # Tab 2: Upload File
-# with tab2:
-#     st.header("Upload a CSV File")
-#     st.info("Ensure the file has a 'statement' column.")
-#     uploaded_file = st.file_uploader("Upload your CSV file:", type=["csv"])
-#     if st.button("Submit", key="submit_file"):
-#         if uploaded_file:
-#             results_df = predict_file(uploaded_file)
-#             if isinstance(results_df, str):
-#                 st.error(results_df)
-#             else:
-#                 st.success("Predictions completed. Download the results below:")
-#                 st.dataframe(results_df)
-#                 csv = results_df.to_csv(index=False).encode("utf-8")
-#                 st.download_button(
-#                     label="Download Predictions",
-#                     data=csv,
-#                     file_name="predicted_results.csv",
-#                     mime="text/csv"
-#                 )
-#         else:
-#             st.warning("Please upload a valid CSV file.")
-#
-# # Tab 3: Answer Questions
-# with tab3:
-#     st.header("Answer Random Questions")
-#     st.info("Answer the following questions in 20-30 words for a personalized diagnosis.")
-#     selected_questions = random.sample(question_pool, 5)
-#     user_responses = []
-#     for i, question in enumerate(selected_questions, start=1):
-#         response = st.text_area(f"Q{i}: {question}", key=f"response_{i}")
-#         user_responses.append(response)
-#
-#     if st.button("Submit", key="submit_questions"):
-#         if all(response.strip() for response in user_responses):
-#             combined_response = " ".join(user_responses)
-#             try:
-#                 result = predict_statement(combined_response)
-#                 st.success(f"The predicted mental health status based on your responses is: **{result}**")
-#
-#                 # Allow downloading responses with results
-#                 report = {
-#                     "questions": selected_questions,
-#                     "responses": user_responses,
-#                     "diagnosis": result
-#                 }
-#                 report_df = pd.DataFrame(report)
-#                 csv = report_df.to_csv(index=False).encode("utf-8")
-#                 st.download_button(
-#                     label="Get My Report",
-#                     data=csv,
-#                     file_name="diagnostic_report.csv",
-#                     mime="text/csv"
-#                 )
-#             except Exception as e:
-#                 st.error(f"Error in processing responses: {e}")
-#         else:
-#             st.warning("Please answer all the questions.")
-#
-# # Footer
-# st.sidebar.markdown("---")
-# st.sidebar.markdown("### About")
-# st.sidebar.markdown("This app uses a fine-tuned RoBERTa-large model for mental health diagnostics.")
-
 import streamlit as st
 import pandas as pd
 import torch
-from transformers import RobertaTokenizer, RobertaForSequenceClassification
 import json
 import random
 import joblib
+import newspaper
+from newspaper import Config
+import nltk
+from transformers import RobertaTokenizer, RobertaForSequenceClassification, RobertaConfig
+import matplotlib.pyplot as plt
+import seaborn as sns
+from wordcloud import WordCloud
+nltk.download('punkt')
+
+# Configure page
+st.set_page_config(page_title="Mental Health Diagnostic App", layout="wide")
+st.markdown("""
+<style>
+.main {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # Paths
 MODEL_PATH = "best_roberta_large_model.pth"
-LABEL_ENCODER_PATH = "label_encoder.pkl"
+LABEL_ENCODER_PATH = "label_classes.pkl"
 QUESTION_POOL_PATH = "question_pool.json"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load model
-model = RobertaForSequenceClassification.from_pretrained("roberta-large", num_labels=7)
+# Load model with updated configuration
+config = RobertaConfig.from_pretrained("roberta-large", num_labels=7)
+model = RobertaForSequenceClassification(config)
+
+# Safe loading with weights_only=True
 try:
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=device), strict=False)
-    model.to(device)
-    model.eval()
+    model_state = torch.load(MODEL_PATH, map_location=device, weights_only=True)
+    model.load_state_dict(model_state, strict=False)
 except FileNotFoundError:
     st.error(f"Model file not found at {MODEL_PATH}. Ensure the model file is available.")
+except RuntimeError as e:
+    st.error(f"Error loading model: {e}")
+
+model.to(device)
+model.eval()
 
 # Load tokenizer
 tokenizer = RobertaTokenizer.from_pretrained("roberta-large")
@@ -195,144 +64,168 @@ except FileNotFoundError:
 except KeyError:
     st.error("Invalid question pool format. Ensure the JSON file contains a 'questions' key.")
 
+# Function to fetch articles
+def fetch_articles(topic, limit=3):
+    NEWS_SOURCE = f"https://news.google.com/search?q={topic}+mental+health&hl=en-US&gl=US&ceid=US:en"
+    st.write(f"Fetching articles for topic: {topic}")
+    st.write(f"URL: {NEWS_SOURCE}")  # Display URL in the app for debugging
+    config = Config()
+    config.fetch_images = False
+    config.request_timeout = 10
+    config.memoize_articles = False  # Disable caching to ensure fresh articles are fetched
+    paper = newspaper.build(NEWS_SOURCE, config=config, language='en')
+    article_list = []
+    if paper.size() == 0:
+        st.write("No articles found at source.")  # Diagnostic message if no articles are found
+    for article in paper.articles[:limit]:
+        try:
+            article.download()
+            article.parse()
+            article_list.append({'title': article.title, 'link': article.url})
+            st.write(f"Article title: {article.title}")  # Debug: print titles to check if parsing is correct
+        except Exception as e:
+            st.write(f"Failed to download or parse article: {e}")
+    return article_list
 
-# Function to predict a single input
+# Prediction function
 def predict_statement(statement):
-    inputs = tokenizer(
-        statement,
-        return_tensors="pt",
-        padding="max_length",
-        truncation=True,
-        max_length=128
-    )
+    inputs = tokenizer(statement, return_tensors="pt", padding="max_length", truncation=True, max_length=128)
     inputs = {key: value.to(device) for key, value in inputs.items()}
-    model.eval()
     with torch.no_grad():
         outputs = model(**inputs)
     prediction = torch.argmax(outputs.logits, dim=1).item()
-
-    # Use the LabelEncoder's inverse_transform method to get the label
-    label = label_encoder.inverse_transform([prediction])[0]
+    label = label_encoder[prediction]  # Corrected this line to use 'prediction' directly
     return label
 
-
-# Function to handle multiple predictions from a DataFrame
-def predict_file(file):
-    try:
-        df = pd.read_csv(file)
-        if "statement" not in df.columns:
-            return "Invalid file format. Ensure the file has a 'statement' column."
-        df["predicted_status"] = df["statement"].apply(predict_statement)
-        return df
-    except Exception as e:
-        return f"Error processing file: {e}"
-
-
-# Streamlit UI
+# Streamlit UI setup
 st.title("Mental Health Diagnostic App")
-
-# Tabs for navigation
 tab1, tab2, tab3 = st.tabs(["Type Input", "Upload File", "Answer Questions"])
 
-# Tab 1: Type Input
 with tab1:
-    st.header("Type Your Statement")
-    user_input = st.text_area("Enter your statement below:")
-    if st.button("Submit", key="submit_text"):
-        if user_input.strip():
-            try:
-                result = predict_statement(user_input)
-                st.success(f"The predicted mental health status is: **{result}**")
-            except Exception as e:
-                st.error(f"Error in prediction: {e}")
-        else:
-            st.warning("Please enter a valid statement.")
 
-# Tab 2: Upload File
+
+    # User input text area
+    user_input = st.text_area(
+        "Enter your statement:",
+        placeholder="Write about how you feel or any mental health-related thoughts here."
+    )
+
+    # Prediction button
+    predict_button = st.button("Predict", help="Click to predict the mental health status based on your input.")
+    if predict_button:
+        with st.spinner('Predicting...'):
+            if user_input.strip():
+                try:
+                    # Perform prediction
+                    result = predict_statement(user_input)
+                    st.success("Prediction completed")
+                    st.write(f"**Prediction:** {result}")
+                    st.session_state['last_result'] = result
+                except Exception as e:
+                    st.error(f"An error occurred during prediction: {e}")
+            else:
+                st.error("Please enter a valid statement.")
+
+    if 'last_result' in st.session_state:
+        show_articles = st.button("Show Related Articles", help="Find related news articles on your predicted topic.")
+        if show_articles:
+            topic = st.session_state['last_result']
+            # Generate the link with proper formatting
+            search_url = f"https://news.google.com/search?q={topic.replace(' ', '+')}+mental+health&hl=en-US&gl=US&ceid=US:en"
+            st.markdown(
+                f"#### Related articles on [**{topic.capitalize()} mental health**]({search_url})",
+                unsafe_allow_html=True
+            )
+
 with tab2:
-    st.header("Upload a Text File")
-    st.info("Ensure the file contains meaningful text content.")
-    uploaded_file = st.file_uploader("Upload your text file:", type=["txt"])
-    if st.button("Submit", key="submit_file"):
-        if uploaded_file:
-            try:
-                # Read the full content of the text file
-                full_text = uploaded_file.read().decode("utf-8").strip()
-
-                if full_text:
-                    # Predict for the entire text
-                    result = predict_statement(full_text)
-
-                    # Display results
-                    st.success("Prediction completed:")
-                    st.write(f"**Predicted mental health status:** {result}")
-
-                    # Allow downloading the prediction result
-                    result_dict = {"uploaded_text": full_text, "predicted_status": result}
-                    result_df = pd.DataFrame([result_dict])
-                    csv = result_df.to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        label="Download Prediction",
-                        data=csv,
-                        file_name="prediction_result.csv",
-                        mime="text/csv"
-                    )
-                else:
-                    st.warning("The uploaded file is empty. Please upload a valid text file.")
-            except Exception as e:
-                st.error(f"Error processing file: {e}")
+    st.subheader("Upload a CSV File")
+    uploaded_file = st.file_uploader("Choose a file", type=["csv"])
+    if uploaded_file:
+        data = pd.read_csv(uploaded_file)
+        if "statement" not in data.columns:
+            st.error("CSV file must contain a 'statement' column.")
         else:
-            st.warning("Please upload a valid text file.")
+            if st.button("Process Predictions"):
+                with st.spinner('Predicting...'):
+                    # Apply prediction function to each statement
+                    data['predicted_status'] = data['statement'].apply(predict_statement)
+                    st.success("Predictions added to the DataFrame.")
 
-# Tab 3
+                # Create a 2-row layout for data and analytics
+                top_row, bottom_row = st.container(), st.container()
+
+                with top_row:
+                    # Display the updated data
+                    st.subheader("Updated Data")
+                    st.write(data)
+
+                    # Download link for updated CSV
+                    def convert_df(df):
+                        return df.to_csv().encode('utf-8')
+
+                    csv = convert_df(data)
+                    st.download_button(
+                        label="Download updated CSV with predictions",
+                        data=csv,
+                        file_name='updated_predictions.csv',
+                        mime='text/csv',
+                    )
+
+                with bottom_row:
+                    # Create columns for analytics at the bottom
+                    st.subheader("Analytics")
+                    col1, col2 = st.columns([1, 2])
+
+                    with col1:
+                        # Frequency Distribution Plot
+                        st.write("### Frequency Distribution")
+                        def plot_prediction_distribution(data):
+                            plt.figure(figsize=(6, 4))
+                            sns.countplot(y=data['predicted_status'], order=data['predicted_status'].value_counts().index)
+                            plt.title('Frequency Distribution of Predictions')
+                            plt.xlabel('Count')
+                            plt.ylabel('Category')
+                            plt.tight_layout()
+                            return plt
+
+                        fig1 = plot_prediction_distribution(data)
+                        st.pyplot(fig1)
+
+                    with col2:
+                        # Word Cloud Plot
+                        st.write("### Word Cloud")
+                        def plot_word_cloud(data):
+                            text = " ".join(statement for statement in data['statement'])
+                            wordcloud = WordCloud(width=800, height=400, background_color='white').generate(text)
+                            plt.figure(figsize=(6, 3))
+                            plt.imshow(wordcloud, interpolation='bilinear')
+                            plt.axis("off")
+                            plt.tight_layout()
+                            return plt
+
+                        fig2 = plot_word_cloud(data)
+                        st.pyplot(fig2)
+
+
 with tab3:
-    st.header("Answer Random Questions")
-    st.info("Answer the following questions in 20-30 words for a personalized diagnosis.")
-
-    # Use session state to store selected questions
+    st.subheader("Answer Random Questions")
     if "selected_questions" not in st.session_state:
         st.session_state["selected_questions"] = random.sample(question_pool, 5)
-
     selected_questions = st.session_state["selected_questions"]
-    user_responses = []
-
-    for i, question in enumerate(selected_questions, start=1):
-        response = st.text_area(f"Q{i}: {question}", key=f"response_{i}")
-        user_responses.append(response)
-
-    if st.button("Submit", key="submit_questions"):
+    user_responses = [st.text_area(f"Q{i}: {question}", key=f"response_{i}") for i, question in enumerate(selected_questions, start=1)]
+    if st.button("Submit Questions"):
         if all(response.strip() for response in user_responses):
             combined_response = " ".join(user_responses)
-            try:
-                result = predict_statement(combined_response)
-                st.success(f"The predicted mental health status based on your responses is: **{result}**")
-
-                # Allow downloading responses with results
-                report = {
-                    "questions": selected_questions,
-                    "responses": user_responses,
-                    "diagnosis": result
-                }
-                report_df = pd.DataFrame(report)
-                csv = report_df.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    label="Get My Report",
-                    data=csv,
-                    file_name="diagnostic_report.csv",
-                    mime="text/csv"
-                )
-
-                # Reset questions after successful submission
-                del st.session_state["selected_questions"]
-
-            except Exception as e:
-                st.error(f"Error in processing responses: {e}")
+            with st.spinner('Analyzing responses...'):
+                try:
+                    result = predict_statement(combined_response)
+                    st.success(f"The predicted mental health status based on your responses is: **{result}**")
+                except Exception as e:
+                    st.error(f"Error in processing responses: {e}")
         else:
             st.warning("Please answer all the questions.")
-
 
 # Footer
 st.sidebar.markdown("---")
 st.sidebar.markdown("### About")
 st.sidebar.markdown("This app uses a fine-tuned RoBERTa-large model for mental health diagnostics.")
-

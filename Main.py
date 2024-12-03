@@ -14,7 +14,7 @@ from imblearn.over_sampling import SMOTE
 from gensim.models import Word2Vec
 import torch
 from sklearn.model_selection import train_test_split
-from transformers import BertTokenizer, BertModel, BertForSequenceClassification, AdamW, RobertaTokenizer, RobertaForSequenceClassification
+from transformers import BertTokenizer, BertModel, BertForSequenceClassification, AdamW, RobertaTokenizer, RobertaForSequenceClassification, AutoTokenizer, AutoModelForSequenceClassification
 from torch.utils.data import DataLoader, Dataset
 from transformers import get_scheduler
 from sklearn.preprocessing import LabelEncoder
@@ -22,6 +22,7 @@ from sklearn.metrics import classification_report,ConfusionMatrixDisplay
 from torch.nn import functional as F
 import joblib
 import random
+from sklearn.utils.class_weight import compute_class_weight
 
 
 
@@ -75,6 +76,8 @@ plt.show()
 print("\nFirst 5 rows of the dataset:")
 print(data.head())
 
+cleaned_data_path = "data/processed/cleaned_data.csv"
+data.to_csv(cleaned_data_path, index=False)
 
 
 
@@ -226,7 +229,7 @@ X_val, X_test, y_val, y_test = train_test_split(
 tokenizer = RobertaTokenizer.from_pretrained("roberta-large")
 
 class TextDataset(Dataset):
-    def __init__(self, texts, labels, tokenizer, max_length=128):
+    def __init__(self, texts, labels, tokenizer, max_length=256):
         self.texts = texts
         self.labels = labels
         self.tokenizer = tokenizer
@@ -257,7 +260,7 @@ val_dataset = TextDataset(X_val, y_val, tokenizer)
 train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=8)
 
-# Model, Optimizer, and Scheduler
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = RobertaForSequenceClassification.from_pretrained(
@@ -273,17 +276,49 @@ lr_scheduler = get_scheduler(
 )
 
 # Focal Loss Function
-def focal_loss(logits, labels, alpha=1.0, gamma=2.0):
-    ce_loss = F.cross_entropy(logits, labels, reduction='none')
+# def focal_loss(logits, labels, alpha=1.0, gamma=2.0):
+#     ce_loss = F.cross_entropy(logits, labels, reduction='none')
+#     p_t = torch.exp(-ce_loss)
+#     focal_loss = alpha * (1 - p_t) ** gamma * ce_loss
+#     return focal_loss.mean()
+
+class_weights = compute_class_weight(
+    class_weight="balanced",
+    classes=np.unique(y_encoded),
+    y=y_encoded
+)
+class_weights_tensor = torch.tensor(class_weights, dtype=torch.float).to(device)
+
+def focal_loss_with_weights(logits, labels, class_weights, alpha=1.0, gamma=2.0):
+    ce_loss = F.cross_entropy(logits, labels, weight=class_weights, reduction='none')
     p_t = torch.exp(-ce_loss)
     focal_loss = alpha * (1 - p_t) ** gamma * ce_loss
     return focal_loss.mean()
+
 
 # Training Loop
 epochs = 7
 patience = 3
 best_val_loss = float("inf")
 stop_counter = 0
+
+# for epoch in range(epochs):
+#     model.train()
+#     total_loss = 0
+#     for batch in train_loader:
+#         batch = {k: v.to(device) for k, v in batch.items()}
+#         outputs = model(
+#             input_ids=batch["input_ids"],
+#             attention_mask=batch["attention_mask"]
+#         )
+#         loss = focal_loss(outputs.logits, batch["label"], alpha=1.0, gamma=2.0)
+#         total_loss += loss.item()
+#         loss.backward()
+#         optimizer.step()
+#         lr_scheduler.step()
+#         optimizer.zero_grad()
+#     avg_train_loss = total_loss / len(train_loader)
+#     print(f"Epoch {epoch + 1}, Training Loss: {avg_train_loss:.4f}")
 
 for epoch in range(epochs):
     model.train()
@@ -294,7 +329,14 @@ for epoch in range(epochs):
             input_ids=batch["input_ids"],
             attention_mask=batch["attention_mask"]
         )
-        loss = focal_loss(outputs.logits, batch["label"], alpha=1.0, gamma=2.0)
+        # Pass class_weights to the loss function
+        loss = focal_loss_with_weights(
+            outputs.logits,
+            batch["label"],
+            class_weights=class_weights_tensor,  # Add this line
+            alpha=1.0,
+            gamma=2.0
+        )
         total_loss += loss.item()
         loss.backward()
         optimizer.step()
@@ -303,7 +345,26 @@ for epoch in range(epochs):
     avg_train_loss = total_loss / len(train_loader)
     print(f"Epoch {epoch + 1}, Training Loss: {avg_train_loss:.4f}")
 
+
     # Validation Loop
+    # model.eval()
+    # val_loss = 0
+    # predictions, true_labels = [], []
+    # with torch.no_grad():
+    #     for batch in val_loader:
+    #         batch = {k: v.to(device) for k, v in batch.items()}
+    #         outputs = model(
+    #             input_ids=batch["input_ids"],
+    #             attention_mask=batch["attention_mask"]
+    #         )
+    #         loss = focal_loss_with_weights(outputs.logits, batch["label"], alpha=1.0, gamma=2.0)
+    #         val_loss += loss.item()
+    #         preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
+    #         predictions.extend(preds)
+    #         true_labels.extend(batch["label"].cpu().numpy())
+    # avg_val_loss = val_loss / len(val_loader)
+    # print(f"Epoch {epoch + 1}, Validation Loss: {avg_val_loss:.4f}")
+
     model.eval()
     val_loss = 0
     predictions, true_labels = [], []
@@ -314,7 +375,14 @@ for epoch in range(epochs):
                 input_ids=batch["input_ids"],
                 attention_mask=batch["attention_mask"]
             )
-            loss = focal_loss(outputs.logits, batch["label"], alpha=1.0, gamma=2.0)
+            # Pass class_weights to the loss function
+            loss = focal_loss_with_weights(
+                outputs.logits,
+                batch["label"],
+                class_weights=class_weights_tensor,  # Add this line
+                alpha=1.0,
+                gamma=2.0
+            )
             val_loss += loss.item()
             preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
             predictions.extend(preds)

@@ -30,11 +30,11 @@ QUESTION_POOL_PATH = "question_pool.json"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load model with updated configuration
+
 config = RobertaConfig.from_pretrained("roberta-large", num_labels=7)
 model = RobertaForSequenceClassification(config)
 
-# Safe loading with weights_only=True
+
 try:
     model_state = torch.load(MODEL_PATH, map_location=device, weights_only=True)
     model.load_state_dict(model_state, strict=False)
@@ -87,7 +87,7 @@ def fetch_articles(topic, limit=3):
             st.write(f"Failed to download or parse article: {e}")
     return article_list
 
-# Prediction function
+# Prediction
 def predict_statement(statement):
     inputs = tokenizer(statement, return_tensors="pt", padding="max_length", truncation=True, max_length=128)
     inputs = {key: value.to(device) for key, value in inputs.items()}
@@ -97,7 +97,7 @@ def predict_statement(statement):
     label = label_encoder[prediction]  # Corrected this line to use 'prediction' directly
     return label
 
-# Streamlit UI setup
+#
 st.title("Mental Health Diagnostic App")
 tab1, tab2, tab3 = st.tabs(["Type Input", "Upload File", "Answer Questions"])
 
@@ -224,6 +224,8 @@ with tab3:
                     st.error(f"Error in processing responses: {e}")
         else:
             st.warning("Please answer all the questions.")
+
+
 
 # Footer
 st.sidebar.markdown("---")

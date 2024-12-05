@@ -30,49 +30,51 @@ from sklearn.utils.class_weight import compute_class_weight
 
 # %% Data Loading
 
-# Load dataset
+
 data = pd.read_csv("data/raw/rawdata.csv")
 
 if "Unnamed: 0" in data.columns:
     data.drop(columns=["Unnamed: 0"], inplace=True)
     print("Dropped 'Unnamed: 0' column.")
 
-# Check rows before cleaning
+
 initial_row_count = data.shape[0]
 print(f"Initial number of rows: {initial_row_count}")
 
-# Strip whitespace and replace empty strings with NaN
+
 data["statement"] = data["statement"].str.strip()
 data["status"] = data["status"].str.strip()
 data.replace("", pd.NA, inplace=True)
 
-# Drop rows where 'statement' or 'status' is NaN
+
 data.dropna(subset=["statement", "status"], inplace=True)
 
-# Drop duplicate rows
+
 duplicate_count = data.duplicated().sum()
 if duplicate_count > 0:
     print(f"Found {duplicate_count} duplicate rows. Removing them...")
     data.drop_duplicates(inplace=True)
 
-# Check rows after cleaning
+
 final_row_count = data.shape[0]
 print(f"Final number of rows: {final_row_count}")
 print(f"Number of rows removed: {initial_row_count - final_row_count}")
 
-# Display missing values
+
 print(f"Missing values after handling: {data.isna().sum().sum()}")
 
-# Plot class distribution
+
 print("\nClass Distribution:")
 print(data["status"].value_counts())
 data["status"].value_counts().plot(kind="bar")
 plt.title("Class Distribution")
 plt.xlabel("Status")
 plt.ylabel("Count")
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
 plt.show()
 
-# Display first 5 rows
+
 print("\nFirst 5 rows of the dataset:")
 print(data.head())
 
@@ -89,9 +91,7 @@ data_path = "data/processed/cleaned_data.csv"
 data = pd.read_csv(data_path)
 
 def clean_text(text):
-    """
-    Clean text by converting to lowercase, removing punctuation, and tokenizing.
-    """
+
     if pd.isna(text):  # Handle NaN values
         text = ""
     text = text.lower()  # Convert to lowercase
@@ -101,44 +101,32 @@ def clean_text(text):
 
 
 def remove_stopwords(tokens):
-    """
-    Remove stopwords from tokenized text.
-    """
     stop_words = set(stopwords.words("english"))
     return [word for word in tokens if word not in stop_words]
 
 
 def lemmatize_text(tokens):
-    """
-    Lemmatize tokens using WordNetLemmatizer.
-    """
+
     lemmatizer = nltk.WordNetLemmatizer()
     return [lemmatizer.lemmatize(word) for word in tokens]
 
 
 def preprocess_text(text):
-    """
-    Full preprocessing pipeline: clean, remove stopwords, and lemmatize.
-    """
     tokens = clean_text(text)
     tokens = remove_stopwords(tokens)
     tokens = lemmatize_text(tokens)
-    return " ".join(tokens)  # Join tokens back into a string
+    return " ".join(tokens)
 
 
 def extract_sentiment(text):
-    """
-    Extract sentiment polarity using TextBlob.
-    """
+
     blob = TextBlob(text)
     return blob.sentiment.polarity
 
 
 def compute_linguistic_features(text):
-    """
-    Compute word count and average sentence length.
-    """
-    if pd.isna(text):  # Handle NaN values
+
+    if pd.isna(text):
         text = ""
     tokens = word_tokenize(text)
     word_count = len(tokens)
@@ -147,10 +135,8 @@ def compute_linguistic_features(text):
 
 
 def visualize_word_cloud(texts):
-    """
-    Generate and display a word cloud.
-    """
-    texts = texts.fillna("").astype(str)  # Handle NaN or non-string values
+
+    texts = texts.fillna("").astype(str)
     all_text = " ".join(texts)
     wordcloud = WordCloud(width=800, height=400, background_color="white").generate(all_text)
     plt.figure(figsize=(10, 5))
@@ -161,10 +147,8 @@ def visualize_word_cloud(texts):
 
 
 def display_common_words(texts, n=10):
-    """
-    Display the most common words in the dataset.
-    """
-    texts = texts.fillna("").astype(str)  # Handle NaN or non-string values
+
+    texts = texts.fillna("").astype(str)
     all_text = " ".join(texts)
     tokens = word_tokenize(all_text)
     word_freq = Counter(tokens)
@@ -173,20 +157,17 @@ def display_common_words(texts, n=10):
         print(f"{word}: {freq}")
 
 
-# Preprocessing Pipeline
-# Apply preprocessing to the 'statement' column
+
 data["cleaned_statement"] = data["statement"].fillna("").apply(preprocess_text)
 
-# Compute linguistic features and add them to the DataFrame
+
 linguistic_features = data["cleaned_statement"].apply(compute_linguistic_features)
 data = pd.concat([data, pd.DataFrame(list(linguistic_features))], axis=1)
 
-# Save the preprocessed data to a CSV file
 preprocessed_path = "data/processed/preprocessed_data.csv"
 data.to_csv(preprocessed_path, index=False)
 print(f"Preprocessed data saved to {preprocessed_path}.")
 
-# Visualizations and EDA
 visualize_word_cloud(data["cleaned_statement"])
 display_common_words(data["cleaned_statement"], n=10)
 
@@ -210,14 +191,13 @@ data["cleaned_statement"] = data["cleaned_statement"].astype(str)
 X = data["cleaned_statement"]
 y = data["status"]
 
-# Encode Labels
+
 label_encoder = LabelEncoder()
 y_encoded = label_encoder.fit_transform(y)
 
-# Save Label Encoder Classes
 joblib.dump(label_encoder.classes_, "label_classes.pkl")
 
-# Train-Test Split
+
 X_train, X_temp, y_train, y_temp = train_test_split(
     X, y_encoded, test_size=0.3, stratify=y_encoded, random_state=42
 )
@@ -225,11 +205,11 @@ X_val, X_test, y_val, y_test = train_test_split(
     X_temp, y_temp, test_size=0.5, stratify=y_temp, random_state=42
 )
 
-# Tokenizer and Dataset
+
 tokenizer = RobertaTokenizer.from_pretrained("roberta-large")
 
 class TextDataset(Dataset):
-    def __init__(self, texts, labels, tokenizer, max_length=256):
+    def __init__(self, texts, labels, tokenizer, max_length=128):
         self.texts = texts
         self.labels = labels
         self.tokenizer = tokenizer
@@ -275,12 +255,7 @@ lr_scheduler = get_scheduler(
     "linear", optimizer=optimizer, num_warmup_steps=int(0.2 * num_training_steps), num_training_steps=num_training_steps
 )
 
-# Focal Loss Function
-# def focal_loss(logits, labels, alpha=1.0, gamma=2.0):
-#     ce_loss = F.cross_entropy(logits, labels, reduction='none')
-#     p_t = torch.exp(-ce_loss)
-#     focal_loss = alpha * (1 - p_t) ** gamma * ce_loss
-#     return focal_loss.mean()
+
 
 class_weights = compute_class_weight(
     class_weight="balanced",
@@ -296,29 +271,12 @@ def focal_loss_with_weights(logits, labels, class_weights, alpha=1.0, gamma=2.0)
     return focal_loss.mean()
 
 
-# Training Loop
+# Training
 epochs = 7
 patience = 3
 best_val_loss = float("inf")
 stop_counter = 0
 
-# for epoch in range(epochs):
-#     model.train()
-#     total_loss = 0
-#     for batch in train_loader:
-#         batch = {k: v.to(device) for k, v in batch.items()}
-#         outputs = model(
-#             input_ids=batch["input_ids"],
-#             attention_mask=batch["attention_mask"]
-#         )
-#         loss = focal_loss(outputs.logits, batch["label"], alpha=1.0, gamma=2.0)
-#         total_loss += loss.item()
-#         loss.backward()
-#         optimizer.step()
-#         lr_scheduler.step()
-#         optimizer.zero_grad()
-#     avg_train_loss = total_loss / len(train_loader)
-#     print(f"Epoch {epoch + 1}, Training Loss: {avg_train_loss:.4f}")
 
 for epoch in range(epochs):
     model.train()
@@ -345,26 +303,7 @@ for epoch in range(epochs):
     avg_train_loss = total_loss / len(train_loader)
     print(f"Epoch {epoch + 1}, Training Loss: {avg_train_loss:.4f}")
 
-
-    # Validation Loop
-    # model.eval()
-    # val_loss = 0
-    # predictions, true_labels = [], []
-    # with torch.no_grad():
-    #     for batch in val_loader:
-    #         batch = {k: v.to(device) for k, v in batch.items()}
-    #         outputs = model(
-    #             input_ids=batch["input_ids"],
-    #             attention_mask=batch["attention_mask"]
-    #         )
-    #         loss = focal_loss_with_weights(outputs.logits, batch["label"], alpha=1.0, gamma=2.0)
-    #         val_loss += loss.item()
-    #         preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
-    #         predictions.extend(preds)
-    #         true_labels.extend(batch["label"].cpu().numpy())
-    # avg_val_loss = val_loss / len(val_loader)
-    # print(f"Epoch {epoch + 1}, Validation Loss: {avg_val_loss:.4f}")
-
+    # Validation
     model.eval()
     val_loss = 0
     predictions, true_labels = [], []
@@ -400,6 +339,7 @@ for epoch in range(epochs):
             print("Early stopping triggered.")
             break
 
+
 # Load Best Model
 model.load_state_dict(torch.load("best_roberta_large_model.pth"))
 
@@ -417,9 +357,11 @@ with torch.no_grad():
         true_labels.extend(batch["label"].cpu().numpy())
 
 print("\nValidation Results:")
+
 print(classification_report(true_labels, predictions, target_names=label_encoder.classes_))
 
 ConfusionMatrixDisplay.from_predictions(true_labels, predictions, display_labels=label_encoder.classes_)
 plt.show()
 
-# %%
+
+

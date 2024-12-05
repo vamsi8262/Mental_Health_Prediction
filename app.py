@@ -99,7 +99,7 @@ def predict_statement(statement):
 
 #
 st.title("Mental Health Diagnostic App")
-tab1, tab2, tab3 = st.tabs(["Type Input", "Upload File", "Answer Questions"])
+tab1, tab2, tab3 = st.tabs(["Self-Assessment", "Batch Analysis", "Questionnaire"])
 
 with tab1:
 

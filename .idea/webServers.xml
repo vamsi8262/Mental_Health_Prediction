@@ -3,7 +3,7 @@
   <component name="WebServers">
     <option name="servers">
       <webServer id="963166fd-a0ab-4bdd-8cb5-ebe85efd1c25" name="NLP_Project">
-        <fileTransfer rootFolder="/home/ubuntu/nlp_project" accessType="SFTP" host="98.81.108.125" port="22" sshConfigId="48e31a3c-cbdf-43d4-bc4e-a2572137c181" sshConfig="ubuntu@98.81.108.125:22 key" keyPair="true">
+        <fileTransfer rootFolder="/home/ubuntu/nlp_project" accessType="SFTP" host="3.235.109.108" port="22" sshConfigId="48e31a3c-cbdf-43d4-bc4e-a2572137c181" sshConfig="ubuntu@3.235.109.108:22 key" keyPair="true">
           <advancedOptions>
             <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
           </advancedOptions>
